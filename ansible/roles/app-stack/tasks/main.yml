@@ -1,0 +1,109 @@
+---
+# roles/app-stack/tasks/main.yml
+# Builds and deploys the Django backend + React frontend on Machine C.
+
+- name: Create /opt/app directory
+  file:
+    path: /opt/app
+    state: directory
+    owner: deploy
+    group: deploy
+    mode: "0755"
+
+- name: Create /opt/frontend/dist directory
+  file:
+    path: /opt/frontend/dist
+    state: directory
+    owner: deploy
+    group: deploy
+    mode: "0755"
+
+# ── Backend image ─────────────────────────────────────────────────────────────
+
+- name: Copy backend source to server
+  synchronize:
+    src: "{{ playbook_dir }}/../../backend/"
+    dest: /opt/app/backend/
+    delete: true
+    rsync_opts:
+      - "--exclude=__pycache__"
+      - "--exclude=*.pyc"
+      - "--exclude=.pytest_cache"
+
+- name: Build backend Docker image
+  community.docker.docker_image:
+    name: "mapboxiuz-backend"
+    tag: "latest"
+    build:
+      path: /opt/app/backend
+    source: build
+    force_source: true
+
+# ── Frontend build ────────────────────────────────────────────────────────────
+
+- name: Copy frontend source to server
+  synchronize:
+    src: "{{ playbook_dir }}/../../frontend/"
+    dest: /opt/app/frontend/
+    delete: true
+    rsync_opts:
+      - "--exclude=node_modules"
+      - "--exclude=dist"
+
+- name: Install frontend npm dependencies
+  community.general.npm:
+    path: /opt/app/frontend
+
+- name: Build frontend (vite build)
+  command:
+    cmd: npm run build
+    chdir: /opt/app/frontend
+  environment:
+    VITE_MAP_STYLE_URL: "{{ r2_base_url }}/styles/osm-bright.json"
+
+- name: Copy built frontend dist to /opt/frontend/dist
+  synchronize:
+    src: /opt/app/frontend/dist/
+    dest: /opt/frontend/dist/
+    delegate_to: "{{ inventory_hostname }}"
+
+# ── Nginx / compose config ────────────────────────────────────────────────────
+
+- name: Deploy docker-compose.yml
+  template:
+    src: docker-compose.yml.j2
+    dest: /opt/app/docker-compose.yml
+    owner: deploy
+    group: deploy
+    mode: "0644"
+
+- name: Deploy nginx.conf
+  template:
+    src: nginx.conf.j2
+    dest: /opt/app/nginx.conf
+    owner: deploy
+    group: deploy
+    mode: "0644"
+
+# ── Start / restart stack ─────────────────────────────────────────────────────
+
+- name: Start app stack
+  community.docker.docker_compose_v2:
+    project_src: /opt/app
+    state: present
+    pull: never
+
+# ── Health check ──────────────────────────────────────────────────────────────
+
+- name: Wait for backend healthz
+  uri:
+    url: "http://localhost:{{ backend_port }}/healthz"
+    status_code: 200
+  register: backend_health
+  until: backend_health.status == 200
+  retries: 30
+  delay: 5
+
+- name: Report backend status
+  debug:
+    msg: "Backend is UP at port {{ backend_port }}"

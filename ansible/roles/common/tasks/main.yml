@@ -1,0 +1,106 @@
+---
+# roles/common/tasks/main.yml
+# Applied to every machine: base packages, firewall, deploy user, Docker.
+# SSH hardening and unattended-upgrades are handled outside this config
+# (VMs are ephemeral instances brought up from snapshots).
+
+- name: Update apt cache
+  apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install base packages
+  apt:
+    name:
+      - curl
+      - ca-certificates
+      - gnupg
+      - lsb-release
+      - ufw
+    state: present
+
+# ── Firewall ──────────────────────────────────────────────────────────────────
+
+- name: Reset UFW to defaults
+  community.general.ufw:
+    state: reset
+
+- name: Allow SSH
+  community.general.ufw:
+    rule: allow
+    port: "22"
+    proto: tcp
+
+- name: Allow HTTP
+  community.general.ufw:
+    rule: allow
+    port: "80"
+    proto: tcp
+
+- name: Allow HTTPS
+  community.general.ufw:
+    rule: allow
+    port: "443"
+    proto: tcp
+
+- name: Enable UFW (default deny incoming)
+  community.general.ufw:
+    state: enabled
+    policy: deny
+    direction: incoming
+
+# ── Deploy user ───────────────────────────────────────────────────────────────
+
+- name: Create deploy group
+  group:
+    name: deploy
+    state: present
+
+- name: Create deploy user
+  user:
+    name: deploy
+    group: deploy
+    groups: docker
+    shell: /bin/bash
+    create_home: true
+    state: present
+
+- name: Add SSH key for deploy user
+  authorized_key:
+    user: deploy
+    key: "{{ deploy_ssh_public_key }}"
+  when: deploy_ssh_public_key is defined
+
+# ── Docker ────────────────────────────────────────────────────────────────────
+
+- name: Add Docker GPG key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: "0644"
+
+- name: Add Docker apt repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc]
+      https://download.docker.com/linux/ubuntu
+      {{ ansible_distribution_release }} stable
+    filename: docker
+    state: present
+
+- name: Install Docker Engine and Compose plugin
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: present
+    update_cache: true
+
+- name: Ensure Docker service is started and enabled
+  systemd:
+    name: docker
+    state: started
+    enabled: true

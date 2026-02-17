@@ -25,8 +25,14 @@ MIDDLEWARE = [
 ROOT_URLCONF = "config.urls"
 ASGI_APPLICATION = "config.asgi.application"
 
-# No database needed — all state is ephemeral / fetched from Valhalla
-DATABASES = {}
+# No models are used; provide a minimal SQLite DB so Django's test runner
+# and pytest-django can set up / tear down without errors.
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": ":memory:",
+    }
+}
 
 # CORS — allow all origins in dev; restrict in prod via env
 CORS_ALLOW_ALL_ORIGINS = DEBUG
