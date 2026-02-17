@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./postgresql.conf:/etc/postgresql/postgresql.conf
+    shm_size: 1g
+    command: postgres -c config_file=/etc/postgresql/postgresql.conf
+    restart: unless-stopped
+
+  nominatim:
+    image: mediagis/nominatim:4.4
+    volumes:
+      - nominatim_data:/nominatim/data
+      - /data:/data
+    environment:
+      PBF_PATH: /data/united-kingdom-latest.osm.pbf
+      NOMINATIM_DATABASE_DSN: "pgsql:host=postgres;dbname=nominatim"
+    depends_on:
+      - postgres
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - certs:/etc/letsencrypt
+    ports:
+      - "443:443"
+      - "80:80"
+    depends_on:
+      - nominatim
+    restart: unless-stopped
+
+volumes:
+  pg_data:
+  nominatim_data:
+  certs:

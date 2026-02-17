@@ -1,0 +1,5 @@
+pg_shared_buffers: "2GB"
+pg_effective_cache_size: "5GB"
+pg_maintenance_work_mem_import: "1GB"
+pg_maintenance_work_mem_steady: "256MB"
+pg_work_mem: "64MB"

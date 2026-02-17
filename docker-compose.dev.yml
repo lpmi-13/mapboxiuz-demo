@@ -1,0 +1,61 @@
+version: "3.9"
+
+# Local development stack.
+#
+# For a lightweight OSM extract use a small region (e.g. Isle of Wight):
+#   curl -O https://download.geofabrik.de/europe/great-britain/england/isle-of-wight-latest.osm.pbf
+#   mv isle-of-wight-latest.osm.pbf tiles/osm-data/
+#
+# Then set OSM_PBF_FILE accordingly (or leave the default below).
+#
+# Valhalla tiles are built on first run (may take several minutes).
+# Nominatim import is skipped if nominatim_data volume already has data.
+
+x-osm-pbf: &osm-pbf
+  OSM_PBF_FILE: isle-of-wight-latest.osm.pbf
+
+services:
+  backend:
+    build:
+      context: ./backend
+    environment:
+      DJANGO_SETTINGS_MODULE: config.settings
+      SECRET_KEY: dev-secret-key-not-for-production
+      DEBUG: "True"
+      VALHALLA_URL: http://valhalla:8002
+      NOMINATIM_URL: http://nominatim:8080
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - valhalla
+    restart: unless-stopped
+
+  valhalla:
+    image: ghcr.io/gis-ops/valhalla:latest
+    volumes:
+      - valhalla_tiles:/custom_files
+      - ./tiles/osm-data:/data
+    environment:
+      <<: *osm-pbf
+      tile_urls: "file:///data/${OSM_PBF_FILE:-isle-of-wight-latest.osm.pbf}"
+    ports:
+      - "127.0.0.1:8002:8002"
+    restart: unless-stopped
+
+  nominatim:
+    image: mediagis/nominatim:4.4
+    volumes:
+      - nominatim_data:/nominatim/data
+      - ./tiles/osm-data:/data
+    environment:
+      PBF_PATH: "/data/${OSM_PBF_FILE:-isle-of-wight-latest.osm.pbf}"
+      REPLICATION_URL: "https://download.geofabrik.de/europe/great-britain-updates/"
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+
+volumes:
+  valhalla_tiles:
+  nominatim_data:
