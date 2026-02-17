@@ -8,53 +8,87 @@ This plan breaks the PROJECT_SPEC.md into ordered, actionable phases. Each phase
 
 Set up the directory structure, tooling, and a working local dev loop before touching any infrastructure.
 
-- [ ] Create the full directory tree from the spec (`backend/`, `frontend/`, `ansible/`, `tiles/`)
-- [ ] **Backend scaffold**: `npm init`, install Fastify, add `src/index.js` entry point, wire up a health-check route (`GET /healthz`)
+- [ ] Create the full directory tree (`backend/`, `frontend/`, `ansible/`, `tiles/`)
+- [ ] **Backend scaffold**: `django-admin startproject`, create a `api` Django app, install `djangorestframework`, `django-cors-headers`, `httpx` (async Valhalla client), `daphne` (ASGI server for SSE support); wire up a health-check view (`GET /healthz`)
 - [ ] **Frontend scaffold**: `npm create vite@latest` (React template), install MapLibre GL JS and `pmtiles` protocol plugin, create placeholder `App.jsx`
 - [ ] Add root-level `docker-compose.dev.yml` for local development (backend + Valhalla + Nominatim against a small OSM extract)
-- [ ] Confirm `docker compose up` starts everything and backend responds on `localhost:3000`
+- [ ] Confirm `docker compose up` starts everything and backend responds on `localhost:8000`
 
 ---
 
-## Phase 2 — Backend Core (Fastify + Valhalla Client)
+## Phase 2 — Backend Core (Django + Valhalla Client)
 
 Build the backend service layer first because the frontend depends on it.
 
-### 2a — Valhalla HTTP client (`services/valhalla.js`)
-- [ ] Implement `getRoute(locations, costing)` — calls `POST /route`
-- [ ] Implement `getMatrix(sources, targets, costing)` — calls `POST /sources_to_targets`
-- [ ] Implement `getIsochrone(lat, lon, time, costing)` — calls `POST /isochrone`
-- [ ] Add basic error handling and response normalization (extract GeoJSON geometry, distance, duration)
+**Stack**: Python 3.12, Django 5.x, Django REST Framework, `httpx` (async HTTP), `daphne` (ASGI), `django-cors-headers`.
 
-### 2b — UK coordinate pool (`utils/ukCoordinates.js`)
+### Directory layout
+
+```
+backend/
+├── manage.py
+├── requirements.txt
+├── Dockerfile
+├── config/                  # Django project settings
+│   ├── settings.py
+│   ├── urls.py
+│   └── asgi.py              # ASGI entry point for daphne
+└── api/                     # Single Django app
+    ├── urls.py
+    ├── views/
+    │   ├── sse.py           # StreamingHttpResponse SSE view
+    │   ├── optimize.py      # Route optimization view
+    │   └── isochrone.py     # Isochrone proxy view
+    ├── services/
+    │   ├── valhalla.py      # httpx Valhalla client
+    │   ├── route_generator.py
+    │   └── optimizer.py     # TSP solver
+    └── utils/
+        └── uk_coordinates.py
+```
+
+### 2a — Valhalla HTTP client (`api/services/valhalla.py`)
+- [ ] Implement `get_route(locations, costing)` — calls `POST /route`
+- [ ] Implement `get_matrix(sources, targets, costing)` — calls `POST /sources_to_targets`
+- [ ] Implement `get_isochrone(lat, lon, time, costing)` — calls `POST /isochrone`
+- [ ] Use `httpx.AsyncClient` with a shared client instance; add error handling and response normalization (extract GeoJSON geometry, distance, duration)
+
+### 2b — UK coordinate pool (`api/utils/uk_coordinates.py`)
 - [ ] Curate a list of ~100 UK city/town coordinates (lat/lon + display name)
-- [ ] Export a helper `pickRandomPair()` that returns two distinct entries
+- [ ] Implement `pick_random_pair()` returning two distinct entries
 
-### 2c — Route generator service (`services/routeGenerator.js`)
-- [ ] Implement `generateRoutes(n=3)` — picks `n` random origin/destination pairs, calls Valhalla for each, returns array of route objects `{ origin, destination, distance_km, duration_min, geometry }`
+### 2c — Route generator service (`api/services/route_generator.py`)
+- [ ] Implement `async generate_routes(n=3)` — picks `n` random origin/destination pairs, calls Valhalla for each concurrently (`asyncio.gather`), returns list of route dicts `{ origin, destination, distance_km, duration_min, geometry }`
 
-### 2d — SSE endpoint (`routes/sse.js`)
-- [ ] Register `GET /api/routes/stream` in Fastify
-- [ ] Set correct headers (`Content-Type: text/event-stream`, `Cache-Control: no-cache`, `Connection: keep-alive`)
-- [ ] Start an interval (10 s) that calls `generateRoutes()` and writes an SSE `data:` frame
-- [ ] Clean up interval on client disconnect
+### 2d — SSE endpoint (`api/views/sse.py`)
+- [ ] Django view returning `StreamingHttpResponse` with `content_type="text/event-stream"`
+- [ ] Use an async generator that `await asyncio.sleep(10)`, calls `generate_routes()`, and yields a properly formatted SSE `data:` frame
+- [ ] Set `X-Accel-Buffering: no` header for Nginx compatibility
+- [ ] Wire up to `GET /api/routes/stream` in `api/urls.py`
 
-### 2e — Route optimization endpoint (`routes/optimize.js`)
-- [ ] Register `POST /api/optimize-route`
+### 2e — Route optimization endpoint (`api/views/optimize.py`)
+- [ ] DRF `APIView` for `POST /api/optimize-route`
 - [ ] Accept `{ stops, fixed_start, round_trip }`
-- [ ] Implement brute-force TSP solver for ≤12 stops (`services/optimizer.js`)
+- [ ] Implement brute-force TSP solver for ≤12 stops in `api/services/optimizer.py` (`itertools.permutations`)
 - [ ] Implement nearest-neighbor + 2-opt heuristic for >12 stops
-- [ ] Call Valhalla `/sources_to_targets` for the distance matrix, then solve, then call `/route` with the optimal order
+- [ ] Call Valhalla `/sources_to_targets` for the distance matrix, solve, then call `/route` with the optimal order
 - [ ] Return `{ ordered_stops, route: { geometry, distance_km, duration_min, legs } }`
 
-### 2f — Isochrone proxy (`routes/isochrone.js`)
-- [ ] Register `GET /api/isochrone`
+### 2f — Isochrone proxy (`api/views/isochrone.py`)
+- [ ] DRF `APIView` for `GET /api/isochrone`
 - [ ] Accept query params `lat, lon, time, costing`
-- [ ] Proxy to Valhalla `/isochrone`, return GeoJSON polygon
+- [ ] Proxy to Valhalla `/isochrone` and return GeoJSON polygon
 
-### 2g — Backend Dockerfile
-- [ ] Multi-stage Dockerfile: `node:20-alpine` build → production image
-- [ ] Expose port 3000
+### 2g — Django settings & wiring
+- [ ] `config/settings.py`: configure `INSTALLED_APPS`, `CORS_ALLOWED_ORIGINS`, `REST_FRAMEWORK` defaults, env-var-driven `VALHALLA_URL` / `NOMINATIM_URL`
+- [ ] `config/asgi.py`: ASGI application for daphne
+- [ ] `config/urls.py`: include `api/urls.py` under `/api/`
+
+### 2h — Backend Dockerfile
+- [ ] `python:3.12-slim` base image
+- [ ] Install requirements, collect static files
+- [ ] Entrypoint: `daphne -b 0.0.0.0 -p 8000 config.asgi:application`
+- [ ] Expose port 8000
 
 ---
 
