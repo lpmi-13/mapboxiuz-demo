@@ -1,6 +1,8 @@
 ---
 # roles/common/tasks/main.yml
-# Applied to every machine: packages, firewall, SSH hardening, deploy user, Docker.
+# Applied to every machine: base packages, firewall, deploy user, Docker.
+# SSH hardening and unattended-upgrades are handled outside this config
+# (VMs are ephemeral instances brought up from snapshots).
 
 - name: Update apt cache
   apt:
@@ -15,8 +17,6 @@
       - gnupg
       - lsb-release
       - ufw
-      - fail2ban
-      - unattended-upgrades
     state: present
 
 # ── Firewall ──────────────────────────────────────────────────────────────────
@@ -48,21 +48,6 @@
     state: enabled
     policy: deny
     direction: incoming
-
-# ── SSH hardening ─────────────────────────────────────────────────────────────
-
-- name: Harden SSH configuration
-  lineinfile:
-    path: /etc/ssh/sshd_config
-    regexp: "{{ item.regexp }}"
-    line: "{{ item.line }}"
-    backup: true
-  loop:
-    - { regexp: "^#?PermitRootLogin", line: "PermitRootLogin no" }
-    - { regexp: "^#?PasswordAuthentication", line: "PasswordAuthentication no" }
-    - { regexp: "^#?X11Forwarding", line: "X11Forwarding no" }
-    - { regexp: "^#?MaxAuthTries", line: "MaxAuthTries 3" }
-  notify: Restart sshd
 
 # ── Deploy user ───────────────────────────────────────────────────────────────
 
@@ -119,11 +104,3 @@
     name: docker
     state: started
     enabled: true
-
-- name: Enable unattended security upgrades
-  copy:
-    dest: /etc/apt/apt.conf.d/20auto-upgrades
-    content: |
-      APT::Periodic::Update-Package-Lists "1";
-      APT::Periodic::Unattended-Upgrade "1";
-    mode: "0644"

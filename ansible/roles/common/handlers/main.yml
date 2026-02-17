@@ -1,5 +1,2 @@
 ---
-- name: Restart sshd
-  systemd:
-    name: sshd
-    state: restarted
+# No handlers needed — SSH config is managed outside this role.

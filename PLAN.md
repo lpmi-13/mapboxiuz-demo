@@ -154,8 +154,8 @@ These scripts run once (or on OSM update) to produce the static assets hosted on
 - [x] Create group var files: `geocoding.yml`, `routing.yml`, `app.yml`
 
 ### 5b — Common role (`roles/common/`)
-- [x] Install base packages, configure firewall (UFW/iptables)
-- [x] SSH hardening, create deploy user
+- [x] Install base packages, configure firewall (UFW)
+- [x] Create deploy user (SSH hardening handled externally — VMs are ephemeral snapshots)
 - [x] Install Docker + Docker Compose plugin
 
 ### 5c — Geocoding stack role (`roles/geocoding-stack/`)
