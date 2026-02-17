@@ -187,6 +187,15 @@ These scripts run once (or on OSM update) to produce the static assets hosted on
 
 ---
 
+## Phase 5½ — CI (GitHub Actions)
+
+- [x] `.github/workflows/ci.yml` — runs on every PR and push to `main`
+- [x] **Backend tests** job: Python 3.12, `pip install -r requirements-dev.txt`, `pytest`
+- [x] **Frontend build** job: Node 20, `npm ci`, `npm run build`
+- [x] All actions pinned to commit SHAs (not version tags) with version comments
+
+---
+
 ## Phase 6 — Integration & Testing
 
 - [ ] End-to-end test: local `docker compose up` → frontend connects SSE → routes appear on map
@@ -226,5 +235,5 @@ Phase 7 (deploy)                ← requires all above
 
 ## Current Status
 
-**Active phase**: Phases 1–5 complete; Phase 6 requires live VMs (manual integration testing)
+**Active phase**: Phases 1–5½ complete; Phase 6 requires live VMs (manual integration testing)
 **Last updated**: 2026-02-17
