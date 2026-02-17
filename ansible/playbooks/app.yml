@@ -1,0 +1,7 @@
+---
+- name: Deploy app stack (Machine C)
+  hosts: app
+  become: true
+  roles:
+    - common
+    - app-stack

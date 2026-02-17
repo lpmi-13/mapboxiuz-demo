@@ -1,0 +1,7 @@
+---
+- name: Deploy routing stack (Machine B)
+  hosts: routing
+  become: true
+  roles:
+    - common
+    - routing-stack

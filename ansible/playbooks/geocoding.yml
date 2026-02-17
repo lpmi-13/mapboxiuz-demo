@@ -1,0 +1,7 @@
+---
+- name: Deploy geocoding stack (Machine A)
+  hosts: geocoding
+  become: true
+  roles:
+    - common
+    - geocoding-stack

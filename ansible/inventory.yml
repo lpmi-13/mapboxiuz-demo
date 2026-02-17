@@ -1,0 +1,17 @@
+all:
+  children:
+    geocoding:
+      hosts:
+        machine-a:
+          ansible_host: "{{ geocoding_ip }}"
+          ansible_user: deploy
+    routing:
+      hosts:
+        machine-b:
+          ansible_host: "{{ routing_ip }}"
+          ansible_user: deploy
+    app:
+      hosts:
+        machine-c:
+          ansible_host: "{{ app_ip }}"
+          ansible_user: deploy

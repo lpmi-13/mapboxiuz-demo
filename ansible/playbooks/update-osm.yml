@@ -1,0 +1,21 @@
+---
+- name: Re-import fresh OSM data on Machine A and rebuild Valhalla tiles on Machine B
+  hosts: geocoding:routing
+  become: true
+  tasks:
+    - name: Stop services
+      community.docker.docker_compose_v2:
+        project_src: /opt/app
+        state: stopped
+
+    - name: Download fresh OSM PBF
+      get_url:
+        url: "https://download.geofabrik.de/europe/united-kingdom-latest.osm.pbf"
+        dest: "/data/{{ osm_pbf }}"
+        mode: "0644"
+      when: inventory_hostname in groups['geocoding'] or inventory_hostname in groups['routing']
+
+    - name: Start services (import/rebuild triggered by container entrypoint)
+      community.docker.docker_compose_v2:
+        project_src: /opt/app
+        state: present

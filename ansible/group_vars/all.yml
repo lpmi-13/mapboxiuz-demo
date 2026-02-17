@@ -1,0 +1,14 @@
+# Shared variables — override in host_vars or via --extra-vars for production
+
+domain: "example.com"
+
+# Cloudflare R2 public bucket URL (no trailing slash)
+r2_base_url: "https://pub-xxxx.r2.dev"
+
+# Private network IPs (Hetzner private network or similar)
+geocoding_ip: "10.0.0.2"
+routing_ip: "10.0.0.3"
+app_ip: "10.0.0.4"
+
+# OSM extract filename (must exist in /data on each machine)
+osm_pbf: "united-kingdom-latest.osm.pbf"
