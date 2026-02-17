@@ -1,0 +1,78 @@
+---
+# roles/routing-stack/tasks/main.yml
+# Deploys Valhalla routing engine on Machine B.
+
+- name: Create /opt/routing directory
+  file:
+    path: /opt/routing
+    state: directory
+    owner: deploy
+    group: deploy
+    mode: "0755"
+
+- name: Create /data directory for OSM PBF
+  file:
+    path: /data
+    state: directory
+    mode: "0755"
+
+# ── Config files ──────────────────────────────────────────────────────────────
+
+- name: Deploy docker-compose.yml
+  copy:
+    src: "{{ playbook_dir }}/../files/routing/docker-compose.yml"
+    dest: /opt/routing/docker-compose.yml
+    owner: deploy
+    group: deploy
+    mode: "0644"
+
+- name: Deploy nginx.conf
+  template:
+    src: nginx.conf.j2
+    dest: /opt/routing/nginx.conf
+    owner: deploy
+    group: deploy
+    mode: "0644"
+
+# ── OSM data ──────────────────────────────────────────────────────────────────
+
+- name: Check if OSM PBF already downloaded
+  stat:
+    path: "/data/{{ osm_pbf }}"
+  register: osm_pbf_stat
+
+- name: Download UK OSM PBF (≈ 2 GB, may take a while)
+  get_url:
+    url: "https://download.geofabrik.de/europe/united-kingdom-latest.osm.pbf"
+    dest: "/data/{{ osm_pbf }}"
+    mode: "0644"
+    timeout: 3600
+  when: not osm_pbf_stat.stat.exists
+
+# ── Start stack ───────────────────────────────────────────────────────────────
+
+- name: Pull latest Valhalla image
+  community.docker.docker_compose_v2_pull:
+    project_src: /opt/routing
+
+- name: Start routing stack (Valhalla tile build runs in container entrypoint)
+  community.docker.docker_compose_v2:
+    project_src: /opt/routing
+    state: present
+    pull: never
+
+# ── Health check ──────────────────────────────────────────────────────────────
+
+- name: Wait for Valhalla to finish tile build and become healthy (up to 90 min)
+  uri:
+    url: "http://localhost:8002/status"
+    status_code: 200
+  register: valhalla_health
+  until: valhalla_health.status == 200
+  retries: 180
+  delay: 30
+  ignore_errors: true
+
+- name: Report Valhalla status
+  debug:
+    msg: "Valhalla is {{ 'UP' if valhalla_health.status == 200 else 'NOT YET READY — check container logs' }}"

@@ -1,0 +1,96 @@
+---
+# roles/geocoding-stack/tasks/main.yml
+# Deploys PostgreSQL/PostGIS + Nominatim on Machine A.
+
+- name: Create /opt/geocoding directory
+  file:
+    path: /opt/geocoding
+    state: directory
+    owner: deploy
+    group: deploy
+    mode: "0755"
+
+- name: Create /data directory for OSM PBF
+  file:
+    path: /data
+    state: directory
+    mode: "0755"
+
+# ── Config files ──────────────────────────────────────────────────────────────
+
+- name: Deploy docker-compose.yml
+  copy:
+    src: "{{ playbook_dir }}/../files/geocoding/docker-compose.yml"
+    dest: /opt/geocoding/docker-compose.yml
+    owner: deploy
+    group: deploy
+    mode: "0644"
+
+- name: Deploy postgresql.conf (import tuning)
+  template:
+    src: postgresql.conf.j2
+    dest: /opt/geocoding/postgresql.conf
+    owner: deploy
+    group: deploy
+    mode: "0644"
+
+- name: Deploy nginx.conf
+  template:
+    src: nginx.conf.j2
+    dest: /opt/geocoding/nginx.conf
+    owner: deploy
+    group: deploy
+    mode: "0644"
+
+# ── OSM data ──────────────────────────────────────────────────────────────────
+
+- name: Check if OSM PBF already downloaded
+  stat:
+    path: "/data/{{ osm_pbf }}"
+  register: osm_pbf_stat
+
+- name: Download UK OSM PBF (≈ 2 GB, may take a while)
+  get_url:
+    url: "https://download.geofabrik.de/europe/united-kingdom-latest.osm.pbf"
+    dest: "/data/{{ osm_pbf }}"
+    mode: "0644"
+    timeout: 3600
+  when: not osm_pbf_stat.stat.exists
+
+# ── Start stack ───────────────────────────────────────────────────────────────
+
+- name: Pull latest images
+  community.docker.docker_compose_v2_pull:
+    project_src: /opt/geocoding
+
+- name: Start geocoding stack (Nominatim import runs in container entrypoint)
+  community.docker.docker_compose_v2:
+    project_src: /opt/geocoding
+    state: present
+    pull: never
+
+# ── Post-import tuning ────────────────────────────────────────────────────────
+
+- name: Wait for Nominatim to become healthy (up to 60 min for initial import)
+  uri:
+    url: "http://localhost:8080/status"
+    status_code: 200
+  register: nominatim_health
+  until: nominatim_health.status == 200
+  retries: 120
+  delay: 30
+  ignore_errors: true
+
+- name: Lower maintenance_work_mem after import
+  community.docker.docker_container_exec:
+    container: geocoding-postgres-1
+    command: >-
+      psql -U postgres -c
+      "ALTER SYSTEM SET maintenance_work_mem = '{{ pg_maintenance_work_mem_steady }}';"
+  when: nominatim_health.status is defined and nominatim_health.status == 200
+
+- name: Reload PostgreSQL config
+  community.docker.docker_container_exec:
+    container: geocoding-postgres-1
+    command: psql -U postgres -c "SELECT pg_reload_conf();"
+  when: nominatim_health.status is defined and nominatim_health.status == 200

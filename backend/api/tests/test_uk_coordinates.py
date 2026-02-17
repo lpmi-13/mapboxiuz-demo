@@ -36,6 +36,9 @@ class TestPickRandomPair:
         assert destination in UK_COORDINATES
 
     def test_randomness_over_multiple_calls(self):
-        pairs = {pick_random_pair() for _ in range(20)}
+        # Dicts aren't hashable; compare by name tuples instead
+        pairs = {
+            (o["name"], d["name"]) for o, d in (pick_random_pair() for _ in range(20))
+        }
         # With 100 cities, 20 draws should yield more than 1 unique pair
         assert len(pairs) > 1

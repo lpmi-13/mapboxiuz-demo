@@ -141,8 +141,8 @@ These scripts run once (or on OSM update) to produce the static assets hosted on
 - [x] `tiles/generate-pmtiles.sh` — Download UK PBF from Geofabrik → run Planetiler or tilemaker → output `uk.pmtiles`
 - [x] `tiles/generate-terrain.sh` — Download SRTM tiles for UK → RGB-encode → package as `uk-terrain.pmtiles`
 - [x] `tiles/upload-r2.sh` — Upload `uk.pmtiles`, `uk-terrain.pmtiles`, style JSON, sprites, and glyphs to Cloudflare R2 using `wrangler` or `rclone`
-- [ ] Prepare/customize map style JSON (e.g. OSM Bright) with source URLs pointing at R2 bucket
-- [ ] Obtain or generate sprite sheets and glyph PBF files
+- [x] `tiles/style-template.json` — MapLibre style with vector + terrain-rgb sources, road/water/label layers; `tiles/build-style.sh` stamps in the R2 base URL at deploy time
+- [ ] Obtain or generate sprite sheets and glyph PBF files (download from OpenMapTiles project)
 
 ---
 
@@ -154,26 +154,26 @@ These scripts run once (or on OSM update) to produce the static assets hosted on
 - [x] Create group var files: `geocoding.yml`, `routing.yml`, `app.yml`
 
 ### 5b — Common role (`roles/common/`)
-- [ ] Install base packages, configure firewall (UFW/iptables)
-- [ ] SSH hardening, create deploy user
-- [ ] Install Docker + Docker Compose plugin
+- [x] Install base packages, configure firewall (UFW/iptables)
+- [x] SSH hardening, create deploy user
+- [x] Install Docker + Docker Compose plugin
 
 ### 5c — Geocoding stack role (`roles/geocoding-stack/`)
-- [ ] Template and deploy `docker-compose.yml`, `postgresql.conf`, `nginx.conf` for Machine A
-- [ ] Download UK OSM PBF if not present
-- [ ] Trigger Nominatim initial import
-- [ ] Post-import: adjust `maintenance_work_mem` down to 256 MB
+- [x] Template and deploy `docker-compose.yml`, `postgresql.conf`, `nginx.conf` for Machine A
+- [x] Download UK OSM PBF if not present
+- [x] Trigger Nominatim initial import
+- [x] Post-import: adjust `maintenance_work_mem` down to 256 MB
 
 ### 5d — Routing stack role (`roles/routing-stack/`)
-- [ ] Template and deploy `docker-compose.yml`, `nginx.conf` for Machine B
-- [ ] Download UK OSM PBF if not present
-- [ ] Trigger Valhalla tile build
+- [x] Template and deploy `docker-compose.yml`, `nginx.conf` for Machine B
+- [x] Download UK OSM PBF if not present
+- [x] Trigger Valhalla tile build
 
 ### 5e — App stack role (`roles/app-stack/`)
-- [ ] Template and deploy `docker-compose.yml`, `nginx.conf` for Machine C
-- [ ] Build and deploy backend Docker image
-- [ ] Deploy frontend `dist/` for Nginx to serve
-- [ ] Configure Nginx for SSE proxying, API reverse proxy, and SPA fallback
+- [x] Template and deploy `docker-compose.yml`, `nginx.conf` for Machine C
+- [x] Build and deploy backend Docker image
+- [x] Deploy frontend `dist/` for Nginx to serve (syncs source, runs `npm run build`, copies dist)
+- [x] Configure Nginx for SSE proxying, API reverse proxy, and SPA fallback
 
 ### 5f — Playbooks
 - [x] `site.yml` — orchestrate full deploy across all machines
@@ -226,5 +226,5 @@ Phase 7 (deploy)                ← requires all above
 
 ## Current Status
 
-**Active phase**: Phases 1–3 complete (code written); 4 scripts done; 5 skeleton done
+**Active phase**: Phases 1–5 complete; Phase 6 requires live VMs (manual integration testing)
 **Last updated**: 2026-02-17

@@ -1,0 +1,18 @@
+events {}
+
+http {
+    server {
+        listen 80;
+        server_name _;
+
+        # Only allow requests from Machine C private IP
+        allow {{ app_ip }};
+        deny  all;
+
+        location / {
+            proxy_pass http://valhalla:{{ valhalla_port }};
+            proxy_set_header Host $host;
+            proxy_read_timeout 120s;
+        }
+    }
+}
